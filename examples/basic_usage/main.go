@@ -128,9 +128,21 @@ func main() {
 	log.Println("Record 2 created.")
 
 	// List Records (with filter)
-	log.Println("Listing 'Blue' records...")
-	filters := map[string]string{"color": "Blue"}
-	records, err := client.Records.List(ctx, dbName, tableName, filters)
+	// List Records (with filter using ListRecordsOptions)
+	log.Println("Listing 'Blue' records using options...")
+	listOpts := &nebula.ListRecordsOptions{ // Use pointer to struct
+		Filters: map[string]string{
+			"color":     "Blue",
+			"is_active": "true", // Query param values are typically strings
+		},
+	}
+	// Add these when backend supports them:
+	// Limit:  nebula.IntPtr(10), // Example helper to get pointer to int
+	// Offset: nebula.IntPtr(0),
+	// SortBy: nebula.StringPtr("widget_name"),
+	// SortDirection: nebula.StringPtr("asc"),
+
+	records, err := client.Records.List(ctx, dbName, tableName, listOpts)
 	if err != nil {
 		log.Fatalf("FATAL: Failed to list records: %v", err)
 	}

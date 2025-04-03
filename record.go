@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -57,43 +58,6 @@ func (s *RecordService) Create(ctx context.Context, dbName, tableName string, re
 	}
 
 	return result.RecordID, nil
-}
-
-// List retrieves records from the specified table, optionally applying filters.
-// Filters are key-value pairs for simple equality matching (e.g., {"status":"active", "priority":"1"}).
-// Returns a slice of maps, where each map represents a record.
-func (s *RecordService) List(ctx context.Context, dbName, tableName string, filters map[string]string) ([]map[string]interface{}, error) {
-	apiPath, err := s.buildRecordPath(dbName, tableName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Add query parameters for filters
-	queryValues := url.Values{}
-	if filters != nil {
-		for key, value := range filters {
-			if key != "" { // Ignore empty keys
-				queryValues.Add(key, value)
-			}
-		}
-	}
-
-	if len(queryValues) > 0 {
-		apiPath = fmt.Sprintf("%s?%s", apiPath, queryValues.Encode())
-	}
-
-	var result []map[string]interface{} // Expecting a JSON array of objects
-	err = s.client.doRequest(ctx, http.MethodGet, apiPath, nil, &result)
-	if err != nil {
-		// Handles 400 (bad filter value/key), 401, 404 (db/table not found), 500
-		return nil, err
-	}
-
-	// Ensure an empty slice is returned instead of nil if API returns null/empty
-	if result == nil {
-		return make([]map[string]interface{}, 0), nil
-	}
-	return result, nil
 }
 
 // Get retrieves a single record by its ID.
@@ -151,3 +115,79 @@ func (s *RecordService) Delete(ctx context.Context, dbName, tableName string, re
 	}
 	return nil // Success
 }
+
+// List retrieves records from the specified table, optionally applying filters.
+// Filters are key-value pairs for simple equality matching (e.g., {"status":"active", "priority":"1"}).
+// Returns a slice of maps, where each map represents a record.
+
+// --- *** MODIFIED: List retrieves records using ListRecordsOptions *** ---
+// Accepts optional parameters via the opts struct.
+func (s *RecordService) List(ctx context.Context, dbName, tableName string, opts *ListRecordsOptions) ([]map[string]interface{}, error) {
+	apiPath, err := s.buildRecordPath(dbName, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	queryValues := url.Values{}
+
+	// Process options if provided
+	if opts != nil {
+		// Add Filters
+		if opts.Filters != nil {
+			for key, value := range opts.Filters {
+				if key != "" { // Ignore empty keys
+					queryValues.Add(key, value) // Value is already string
+				}
+			}
+		}
+
+		// Add Limit (if backend supported it)
+		if opts.Limit != nil {
+			if *opts.Limit >= 0 { // Allow 0 potentially, though backend might enforce > 0
+				queryValues.Add("limit", strconv.Itoa(*opts.Limit))
+			}
+		}
+
+		// Add Offset (if backend supported it)
+		if opts.Offset != nil {
+			if *opts.Offset >= 0 {
+				queryValues.Add("offset", strconv.Itoa(*opts.Offset))
+			}
+		}
+
+		// Add Sort (if backend supported it)
+		if opts.SortBy != nil && *opts.SortBy != "" {
+			sortParam := *opts.SortBy
+			if opts.SortDirection != nil {
+				dir := strings.ToLower(*opts.SortDirection)
+				if dir == "asc" || dir == "desc" {
+					sortParam = fmt.Sprintf("%s:%s", sortParam, dir)
+				} else {
+					// Optionally return an error for invalid sort direction
+					// return nil, fmt.Errorf("invalid sort direction: %s", *opts.SortDirection)
+					// Or just ignore invalid direction and sort by column ascending
+				}
+			}
+			queryValues.Add("sort", sortParam)
+		}
+	}
+
+	// Append query string if any parameters were added
+	if len(queryValues) > 0 {
+		apiPath = fmt.Sprintf("%s?%s", apiPath, queryValues.Encode())
+	}
+
+	var result []map[string]interface{} // Expecting a JSON array of objects
+	err = s.client.doRequest(ctx, http.MethodGet, apiPath, nil, &result)
+	if err != nil {
+		// Handles 400 (if backend adds validation for limit/offset/sort/filter), 401, 404, 500
+		return nil, err
+	}
+
+	if result == nil {
+		return make([]map[string]interface{}, 0), nil
+	}
+	return result, nil
+}
+
+// --- *** END MODIFIED *** ---

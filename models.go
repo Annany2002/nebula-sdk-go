@@ -72,7 +72,27 @@ type UpdateRecordResponse struct {
 // for the record data itself, unless you want to provide helpers for
 // unmarshaling into user-defined structs later.
 
-// --- General Models ---
+// --- *** NEW: Options for Listing Records *** ---
+
+// ListRecordsOptions specifies optional parameters for listing records.
+// Uses pointers to distinguish between zero values and unset parameters.
+type ListRecordsOptions struct {
+	// Filters apply simple equality checks (e.g., {"status":"active", "priority":"1"}).
+	// Backend validates keys and converts values based on schema.
+	Filters map[string]string
+
+	// Limit the number of records returned (for pagination). Backend support required.
+	Limit *int
+
+	// Offset the starting point of the returned records (for pagination). Backend support required.
+	Offset *int
+
+	// SortBy specifies the column name to sort by. Backend support required.
+	SortBy *string
+
+	// SortDirection specifies the sort direction ("asc" or "desc"). Backend support required.
+	SortDirection *string // "asc" or "desc"
+}
 
 // ErrorResponse defines the standard JSON error structure returned by the API.
 type ErrorResponse struct {
